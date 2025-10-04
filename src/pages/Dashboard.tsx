@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { formatINR } from '@/lib/currency';
 import { 
   TrendingUp, 
@@ -8,7 +10,11 @@ import {
   Wallet, 
   Building2,
   AlertCircle,
-  ArrowUpRight
+  ArrowUpRight,
+  UserPlus,
+  FolderPlus,
+  Receipt,
+  Coins
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Link } from 'react-router-dom';
@@ -23,6 +29,7 @@ interface DashboardStats {
 }
 
 const Dashboard = () => {
+  const navigate = useNavigate();
   const [stats, setStats] = useState<DashboardStats>({
     activeProjects: 0,
     totalOutstanding: 0,
@@ -206,6 +213,49 @@ const Dashboard = () => {
           );
         })}
       </div>
+
+      {/* Quick Actions */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Quick Actions</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Button
+              variant="outline"
+              className="h-auto flex-col items-start gap-2 p-4"
+              onClick={() => navigate('/customers')}
+            >
+              <UserPlus className="h-5 w-5" />
+              <span className="text-sm font-semibold">Add Customer</span>
+            </Button>
+            <Button
+              variant="outline"
+              className="h-auto flex-col items-start gap-2 p-4"
+              onClick={() => navigate('/projects')}
+            >
+              <FolderPlus className="h-5 w-5" />
+              <span className="text-sm font-semibold">Add Project</span>
+            </Button>
+            <Button
+              variant="outline"
+              className="h-auto flex-col items-start gap-2 p-4"
+              onClick={() => navigate('/transactions')}
+            >
+              <Receipt className="h-5 w-5" />
+              <span className="text-sm font-semibold">Add Transaction</span>
+            </Button>
+            <Button
+              variant="outline"
+              className="h-auto flex-col items-start gap-2 p-4"
+              onClick={() => navigate('/petty-cash')}
+            >
+              <Coins className="h-5 w-5" />
+              <span className="text-sm font-semibold">Add Petty Cash</span>
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Top Projects */}

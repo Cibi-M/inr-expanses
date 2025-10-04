@@ -8,9 +8,10 @@ import Layout from "@/components/Layout";
 import Dashboard from "./pages/Dashboard";
 import Auth from "./pages/Auth";
 import Customers from "./pages/Customers";
-import Projects from "./pages/Projects";
-import Transactions from "./pages/Transactions";
-import PettyCash from "./pages/PettyCash";
+import Projects from "./pages/ProjectsUpdated";
+import Transactions from "./pages/TransactionsUpdated";
+import ProjectDetails from "./pages/ProjectDetails";
+import PettyCash from "./pages/PettyCashUpdated";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -33,8 +34,9 @@ const App = () => (
             <Route path="/auth" element={<Auth />} />
             <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
             <Route path="/customers" element={<ProtectedRoute><Customers /></ProtectedRoute>} />
-            <Route path="/projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
-            <Route path="/transactions" element={<ProtectedRoute><Transactions /></ProtectedRoute>} />
+          <Route path="/projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
+          <Route path="/projects/:id" element={<ProtectedRoute><ProjectDetails /></ProtectedRoute>} />
+          <Route path="/transactions" element={<ProtectedRoute><Transactions /></ProtectedRoute>} />
             <Route path="/petty-cash" element={<ProtectedRoute><PettyCash /></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>

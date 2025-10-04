@@ -27,11 +27,12 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { Plus, ArrowUp, ArrowDown } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Plus, ArrowUp, ArrowDown, Pencil, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatINR } from '@/lib/currency';
 import { Badge } from '@/components/ui/badge';
+import { SearchableSelect } from '@/components/SearchableSelect';
 
 interface Transaction {
   id: string;
@@ -52,8 +53,18 @@ const Transactions = () => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [customers, setCustomers] = useState<any[]>([]);
   const [projects, setProjects] = useState<any[]>([]);
+  const [allProjects, setAllProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+
+  const [filters, setFilters] = useState({
+    customer: '',
+    project: '',
+    type: '',
+    fund: '',
+    mode: '',
+  });
 
   const [formData, setFormData] = useState({
     customer_id: '',
@@ -69,6 +80,7 @@ const Transactions = () => {
   useEffect(() => {
     fetchTransactions();
     fetchCustomers();
+    fetchAllProjects();
   }, []);
 
   useEffect(() => {
@@ -107,6 +119,20 @@ const Transactions = () => {
     }
   };
 
+  const fetchAllProjects = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('projects')
+        .select('id, name, customer_id')
+        .order('name');
+
+      if (error) throw error;
+      setAllProjects(data || []);
+    } catch (error: any) {
+      toast.error('Failed to fetch projects');
+    }
+  };
+
   const fetchProjectsByCustomer = async (customerId: string) => {
     try {
       const { data, error } = await supabase
@@ -131,18 +157,62 @@ const Transactions = () => {
         amount: parseFloat(formData.amount),
       };
 
-      const { error } = await supabase
-        .from('transactions')
-        .insert([txData]);
+      if (editingTransaction) {
+        const { error } = await supabase
+          .from('transactions')
+          .update(txData)
+          .eq('id', editingTransaction.id);
 
-      if (error) throw error;
-      toast.success('Transaction created successfully');
+        if (error) throw error;
+        toast.success('Transaction updated successfully');
+      } else {
+        const { error } = await supabase
+          .from('transactions')
+          .insert([txData]);
+
+        if (error) throw error;
+        toast.success('Transaction created successfully');
+      }
+
       setDialogOpen(false);
       resetForm();
       fetchTransactions();
     } catch (error: any) {
-      toast.error(error.message || 'Failed to create transaction');
+      toast.error(error.message || 'Failed to save transaction');
     }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this transaction?')) return;
+
+    try {
+      const { error } = await supabase
+        .from('transactions')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      toast.success('Transaction deleted');
+      fetchTransactions();
+    } catch (error: any) {
+      toast.error('Failed to delete transaction');
+    }
+  };
+
+  const openEditDialog = (transaction: Transaction) => {
+    setEditingTransaction(transaction);
+    setFormData({
+      customer_id: transaction.customer_id,
+      project_id: transaction.project_id,
+      transaction_type: transaction.transaction_type as any,
+      fund_source: transaction.fund_source as any,
+      amount: transaction.amount.toString(),
+      payment_mode: transaction.payment_mode || '',
+      reason: transaction.reason,
+      metadata: transaction.metadata || {},
+    });
+    fetchProjectsByCustomer(transaction.customer_id);
+    setDialogOpen(true);
   };
 
   const resetForm = () => {
@@ -157,7 +227,17 @@ const Transactions = () => {
       metadata: {},
     });
     setProjects([]);
+    setEditingTransaction(null);
   };
+
+  const filteredTransactions = transactions.filter((tx) => {
+    if (filters.customer && tx.customer_id !== filters.customer) return false;
+    if (filters.project && tx.project_id !== filters.project) return false;
+    if (filters.type && tx.transaction_type !== filters.type) return false;
+    if (filters.fund && tx.fund_source !== filters.fund) return false;
+    if (filters.mode && !tx.payment_mode?.toLowerCase().includes(filters.mode.toLowerCase())) return false;
+    return true;
+  });
 
   return (
     <div className="space-y-6">
@@ -180,9 +260,9 @@ const Transactions = () => {
           </DialogTrigger>
           <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>Add Transaction</DialogTitle>
+              <DialogTitle>{editingTransaction ? 'Edit' : 'Add'} Transaction</DialogTitle>
               <DialogDescription>
-                Record a new payment or expense
+                {editingTransaction ? 'Update' : 'Record a new'} payment or expense
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4">
@@ -303,7 +383,7 @@ const Transactions = () => {
                   Cancel
                 </Button>
                 <Button type="submit">
-                  Create Transaction
+                  {editingTransaction ? 'Update' : 'Create'} Transaction
                 </Button>
               </div>
             </form>
@@ -312,7 +392,70 @@ const Transactions = () => {
       </div>
 
       <Card>
-        <CardContent className="pt-6">
+        <CardContent className="pt-6 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+            <div className="space-y-2">
+              <Label>Customer</Label>
+              <SearchableSelect
+                options={customers.map((c) => ({ value: c.id, label: c.name }))}
+                value={filters.customer}
+                onValueChange={(value) => setFilters({ ...filters, customer: value })}
+                placeholder="All customers"
+                searchPlaceholder="Search customers..."
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Project</Label>
+              <SearchableSelect
+                options={allProjects.map((p) => ({ value: p.id, label: p.name }))}
+                value={filters.project}
+                onValueChange={(value) => setFilters({ ...filters, project: value })}
+                placeholder="All projects"
+                searchPlaceholder="Search projects..."
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Type</Label>
+              <Select
+                value={filters.type}
+                onValueChange={(value) => setFilters({ ...filters, type: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="All types" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value=" ">All types</SelectItem>
+                  <SelectItem value="credit">Credit</SelectItem>
+                  <SelectItem value="debit">Debit</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Fund Source</Label>
+              <Select
+                value={filters.fund}
+                onValueChange={(value) => setFilters({ ...filters, fund: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="All sources" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value=" ">All sources</SelectItem>
+                  <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="bank">Bank</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Payment Mode</Label>
+              <Input
+                placeholder="Search mode..."
+                value={filters.mode}
+                onChange={(e) => setFilters({ ...filters, mode: e.target.value })}
+              />
+            </div>
+          </div>
+
           {loading ? (
             <div className="space-y-2">
               {[1, 2, 3].map((i) => (
@@ -330,17 +473,18 @@ const Transactions = () => {
                   <TableHead>Fund</TableHead>
                   <TableHead className="text-right">Amount</TableHead>
                   <TableHead>Mode</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {transactions.length === 0 ? (
+                {filteredTransactions.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground">
+                    <TableCell colSpan={8} className="text-center text-muted-foreground">
                       No transactions found
                     </TableCell>
                   </TableRow>
                 ) : (
-                  transactions.map((tx) => (
+                  filteredTransactions.map((tx) => (
                     <TableRow key={tx.id}>
                       <TableCell className="text-sm">
                         {new Date(tx.created_at).toLocaleDateString('en-IN')}
@@ -368,6 +512,24 @@ const Transactions = () => {
                       </TableCell>
                       <TableCell className="text-sm text-muted-foreground">
                         {tx.payment_mode}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => openEditDialog(tx)}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => handleDelete(tx.id)}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,11 +28,13 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Plus, Pencil, Trash2, Eye, UserPlus } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatINR } from '@/lib/currency';
 import { Badge } from '@/components/ui/badge';
+import { CustomerDialog } from '@/components/CustomerDialog';
+import { SearchableSelect } from '@/components/SearchableSelect';
 
 interface Project {
   id: string;
@@ -51,11 +54,24 @@ interface Customer {
 }
 
 const Projects = () => {
+  const navigate = useNavigate();
   const [projects, setProjects] = useState<Project[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [customerDialogOpen, setCustomerDialogOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
+
+  const [filters, setFilters] = useState({
+    customer: '',
+    status: '',
+    minTotal: '',
+    maxTotal: '',
+    minPaid: '',
+    maxPaid: '',
+    minPending: '',
+    maxPending: '',
+  });
 
   const [formData, setFormData] = useState({
     customer_id: '',
@@ -177,6 +193,11 @@ const Projects = () => {
     setDialogOpen(true);
   };
 
+  const handleCustomerCreated = (customerId: string) => {
+    setFormData({ ...formData, customer_id: customerId });
+    fetchCustomers();
+  };
+
   const getStatusBadge = (status: string) => {
     const variants: Record<string, 'default' | 'secondary' | 'outline' | 'destructive'> = {
       prospect: 'outline',
@@ -186,6 +207,16 @@ const Projects = () => {
     };
     return <Badge variant={variants[status] || 'outline'}>{status}</Badge>;
   };
+
+  const filteredProjects = projects.filter((project) => {
+    if (filters.customer && project.customer_id !== filters.customer) return false;
+    if (filters.status && project.status !== filters.status) return false;
+    if (filters.minTotal && Number(project.estimated_total) < Number(filters.minTotal)) return false;
+    if (filters.maxTotal && Number(project.estimated_total) > Number(filters.maxTotal)) return false;
+    if (filters.minPending && Number(project.remaining_amount) < Number(filters.minPending)) return false;
+    if (filters.maxPending && Number(project.remaining_amount) > Number(filters.maxPending)) return false;
+    return true;
+  });
 
   return (
     <div className="space-y-6">
@@ -216,20 +247,30 @@ const Projects = () => {
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="customer">Customer *</Label>
-                <Select
-                  value={formData.customer_id}
-                  onValueChange={(value) => setFormData({ ...formData, customer_id: value })}
-                  required
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select customer" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {customers.map((c) => (
-                      <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-2">
+                  <Select
+                    value={formData.customer_id}
+                    onValueChange={(value) => setFormData({ ...formData, customer_id: value })}
+                    required
+                  >
+                    <SelectTrigger className="flex-1">
+                      <SelectValue placeholder="Select customer" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {customers.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setCustomerDialogOpen(true)}
+                  >
+                    <UserPlus className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="name">Project Name *</Label>
@@ -241,7 +282,7 @@ const Projects = () => {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="estimated_total">Estimated Total (₹) *</Label>
+                <Label htmlFor="estimated_total">Total Value (₹) *</Label>
                 <Input
                   id="estimated_total"
                   type="number"
@@ -299,8 +340,63 @@ const Projects = () => {
         </Dialog>
       </div>
 
+      <CustomerDialog
+        open={customerDialogOpen}
+        onOpenChange={setCustomerDialogOpen}
+        onCustomerCreated={handleCustomerCreated}
+      />
+
       <Card>
-        <CardContent className="pt-6">
+        <CardContent className="pt-6 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="space-y-2">
+              <Label>Customer</Label>
+              <SearchableSelect
+                options={customers.map((c) => ({ value: c.id, label: c.name }))}
+                value={filters.customer}
+                onValueChange={(value) => setFilters({ ...filters, customer: value })}
+                placeholder="All customers"
+                searchPlaceholder="Search customers..."
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select
+                value={filters.status}
+                onValueChange={(value) => setFilters({ ...filters, status: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="All statuses" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value=" ">All statuses</SelectItem>
+                  <SelectItem value="prospect">Prospect</SelectItem>
+                  <SelectItem value="active">Active</SelectItem>
+                  <SelectItem value="completed">Completed</SelectItem>
+                  <SelectItem value="cancelled">Cancelled</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Min Total Value</Label>
+              <Input
+                type="number"
+                placeholder="Min"
+                value={filters.minTotal}
+                onChange={(e) => setFilters({ ...filters, minTotal: e.target.value })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Max Total Value</Label>
+              <Input
+                type="number"
+                placeholder="Max"
+                value={filters.maxTotal}
+                onChange={(e) => setFilters({ ...filters, maxTotal: e.target.value })}
+              />
+            </div>
+          </div>
+
           {loading ? (
             <div className="space-y-2">
               {[1, 2, 3].map((i) => (
@@ -314,20 +410,20 @@ const Projects = () => {
                   <TableHead>Project Name</TableHead>
                   <TableHead>Customer</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Estimated</TableHead>
-                  <TableHead className="text-right">Remaining</TableHead>
+                  <TableHead className="text-right">Total Value</TableHead>
+                  <TableHead className="text-right">Pending</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {projects.length === 0 ? (
+                {filteredProjects.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={6} className="text-center text-muted-foreground">
                       No projects found
                     </TableCell>
                   </TableRow>
                 ) : (
-                  projects.map((project) => (
+                  filteredProjects.map((project) => (
                     <TableRow key={project.id}>
                       <TableCell className="font-medium">{project.name}</TableCell>
                       <TableCell>{project.customers?.name || '-'}</TableCell>
@@ -340,6 +436,13 @@ const Projects = () => {
                       </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => navigate(`/projects/${project.id}`)}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
                           <Button
                             variant="ghost"
                             size="icon"
